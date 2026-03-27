@@ -1,0 +1,1804 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1, maximum-scale=5">
+<title>Flowth Race</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&family=Rajdhani:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+  import { getFirestore, collection, doc, setDoc, getDocs, deleteDoc, onSnapshot }
+    from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyAjTAlATS6lCm5jhveTh09lhQXmKV3Lhtg",
+    authDomain: "flowth-race.firebaseapp.com",
+    projectId: "flowth-race",
+    storageBucket: "flowth-race.firebasestorage.app",
+    messagingSenderId: "684749071236",
+    appId: "1:684749071236:web:376d580007b8607cd2b3d1"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+  window._db = db;
+  window._fs = { collection, doc, setDoc, getDocs, deleteDoc, onSnapshot };
+  window.dispatchEvent(new Event('firebase-ready'));
+</script>
+
+<style>
+/* ══ FLUID SCALING — inspired by Lando Norris ══ */
+:root {
+  --min-width: 992px;
+  --max-width: 1920px;
+  --design-width: 1440;
+  --design-unit: 16;
+  --scale-factor: 1;
+  --fluid-container: clamp(var(--min-width), 100vw, var(--max-width));
+  --fluid-font: calc(var(--fluid-container) / var(--design-width) * var(--design-unit) * var(--scale-factor));
+
+  /* Colors */
+  --bg: #030508;
+  --surface: #080d10;
+  --surface2: #0d1418;
+  --surface3: #111b20;
+  --border: #1a2a30;
+  --border2: #243540;
+  --text: #e8f4f0;
+  --muted: #4a7060;
+  --muted2: #1a2a30;
+  --green: #00ff88;
+  --green2: #00cc6a;
+  --green3: #004422;
+  --white: #ffffff;
+  --red: #ff2d55;
+  --yellow: #ffd234;
+  --silver: #b0c8c0;
+  --bronze: #e67c2f;
+  --blue: #00aaff;
+  --accent: #00ff88;
+  --accent2: #ff2d55;
+  --glow: 0 0 20px rgba(0,255,136,.25);
+  --glow-strong: 0 0 40px rgba(0,255,136,.4);
+  --glow-red: 0 0 20px rgba(255,45,85,.3);
+
+  /* Animation */
+  --cubic-default: cubic-bezier(0.65, 0.05, 0, 1);
+  --duration-default: 0.75s;
+  --animation-default: var(--duration-default) var(--cubic-default);
+  --nav-height: 64px;
+}
+
+@media screen and (max-width: 991px) {
+  :root {
+    --min-width: 768px;
+    --max-width: 991px;
+    --design-unit: 20;
+    --nav-height: 52px;
+  }
+}
+@media screen and (max-width: 479px) {
+  :root {
+    --min-width: 320px;
+    --max-width: 479px;
+    --design-unit: 40;
+    --nav-height: 48px;
+  }
+}
+
+html {
+  font-size: var(--fluid-font);
+  scroll-behavior: initial;
+}
+
+*{ margin:0; padding:0; box-sizing:border-box; -webkit-font-smoothing: antialiased; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Rajdhani', sans-serif;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* ── VIDEO BACKGROUND ── */
+#bg-video {
+  position: fixed;
+  inset: 0;
+  width: 100%; height: 100%;
+  object-fit: cover;
+  z-index: 0;
+  opacity: 0.18;
+  pointer-events: none;
+}
+
+/* ── GRID LINES BACKGROUND ── */
+body::before {
+  content:'';
+  position:fixed; inset:0;
+  background-image:
+    linear-gradient(rgba(0,255,136,.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,255,136,.025) 1px, transparent 1px);
+  background-size: 80px 80px;
+  pointer-events:none; z-index:1;
+  animation: gridShift 30s linear infinite;
+}
+@keyframes gridShift {
+  0%{ background-position: 0 0, 0 0; }
+  100%{ background-position: 80px 80px, 80px 80px; }
+}
+
+/* ── SCANLINE OVERLAY ── */
+body::after {
+  content:'';
+  position:fixed; inset:0;
+  background: repeating-linear-gradient(
+    0deg, transparent, transparent 2px,
+    rgba(0,0,0,.06) 2px, rgba(0,0,0,.06) 4px
+  );
+  pointer-events:none; z-index:2;
+}
+
+/* ── LOADING ── */
+.fb-loading {
+  position:fixed; inset:0;
+  background: var(--bg);
+  display:flex; align-items:center; justify-content:center;
+  z-index:9999; flex-direction:column; gap:20px;
+}
+.fb-loading.hide { display:none; }
+.load-logo {
+  font-family:'Orbitron',sans-serif;
+  font-size: clamp(20px, 2.5vw, 32px); font-weight:900;
+  letter-spacing:8px; color:var(--green);
+  text-shadow: var(--glow-strong);
+  animation: loadpulse 1.5s ease-in-out infinite;
+}
+@keyframes loadpulse{ 0%,100%{opacity:.4} 50%{opacity:1} }
+.load-bar{ width:200px; height:2px; background:var(--border); border-radius:2px; overflow:hidden; }
+.load-bar-fill{ height:100%; width:0; background:var(--green); box-shadow:var(--glow); animation:loadfill 2s ease-in-out infinite; }
+@keyframes loadfill{ 0%{width:0;opacity:1} 80%{width:100%;opacity:1} 100%{width:100%;opacity:0} }
+.load-txt{ font-size:11px; letter-spacing:4px; text-transform:uppercase; color:var(--muted); }
+
+/* ── NAV ── */
+.nav {
+  background: rgba(3,5,8,.95);
+  border-bottom: 1px solid var(--border);
+  padding: 0 clamp(16px, 3vw, 40px);
+  height: var(--nav-height);
+  display:flex; align-items:center; justify-content:space-between;
+  position: sticky; top:0; z-index:200;
+  backdrop-filter: blur(20px);
+  transition: background var(--animation-default), border-color var(--animation-default);
+}
+.nav::after {
+  content:''; position:absolute; bottom:0; left:0; right:0; height:1px;
+  background: linear-gradient(90deg, transparent, var(--green), transparent);
+  opacity:.5;
+  transition: opacity var(--animation-default);
+}
+.nav:hover::after { opacity:.9; }
+
+.nav-logo {
+  font-family:'Orbitron',sans-serif;
+  font-size: clamp(11px, 1.1vw, 16px); font-weight:900;
+  letter-spacing:4px; text-transform:uppercase;
+  color:var(--white);
+  display:flex; align-items:center; gap:12px;
+  text-decoration:none;
+}
+.logo-mark {
+  width: clamp(28px, 2.5vw, 38px); height: clamp(28px, 2.5vw, 38px);
+  border:2px solid var(--green); border-radius:4px;
+  display:flex; align-items:center; justify-content:center;
+  position:relative; box-shadow:var(--glow);
+  transition: box-shadow var(--animation-default), border-color var(--animation-default);
+  flex-shrink:0;
+}
+.logo-mark::before {
+  content:'F';
+  font-family:'Orbitron',sans-serif;
+  font-size:clamp(13px,1.3vw,18px); font-weight:900;
+  color:var(--green); text-shadow:var(--glow);
+}
+.logo-mark:hover { box-shadow: var(--glow-strong); }
+.logo-sub {
+  font-size:10px; letter-spacing:6px; color:var(--muted);
+  font-family:'Rajdhani',sans-serif; font-weight:400;
+  display:block; margin-top:2px;
+}
+@media(max-width:479px){ .logo-sub{ display:none; } }
+
+.nav-tabs { display:flex; gap:2px; }
+.ntab {
+  background:none; border:none;
+  color:var(--muted);
+  font-family:'Orbitron',sans-serif;
+  font-size: clamp(8px, 0.7vw, 10px); font-weight:700;
+  letter-spacing:3px; text-transform:uppercase;
+  padding: clamp(6px,0.6vw,8px) clamp(12px,1.5vw,22px);
+  cursor:pointer; position:relative;
+  transition: color var(--animation-default);
+}
+.ntab::before {
+  content:''; position:absolute; bottom:-1px; left:50%; right:50%;
+  height:2px; background:var(--green);
+  transition: left var(--animation-default), right var(--animation-default);
+  box-shadow:var(--glow);
+}
+.ntab.active { color:var(--white); }
+.ntab.active::before { left:0; right:0; }
+.ntab:hover:not(.active){ color:rgba(255,255,255,.6); }
+
+.view { display:none; position:relative; z-index:2; }
+.view.active { display:block; }
+
+/* ── SCROLL ANIMATIONS — char by char reveal ── */
+.reveal {
+  opacity:0;
+  transform: translateY(24px);
+  transition: opacity .7s var(--cubic-default), transform .7s var(--cubic-default);
+}
+.reveal.visible { opacity:1; transform:translateY(0); }
+.reveal-delay-1 { transition-delay:.08s; }
+.reveal-delay-2 { transition-delay:.16s; }
+.reveal-delay-3 { transition-delay:.24s; }
+.reveal-delay-4 { transition-delay:.32s; }
+
+/* ── GRID VIEW ── */
+.grid-bg { min-height:calc(100vh - var(--nav-height)); }
+
+/* ── STICKY HERO ── */
+.grid-hero-sticky {
+  position: sticky;
+  top: var(--nav-height);
+  z-index:100;
+  background: var(--bg);
+}
+
+/* ── SEASON BANNER ── */
+.season-banner {
+  text-align:center;
+  padding: clamp(20px,3vw,36px) clamp(16px,3vw,32px) clamp(12px,1.5vw,20px);
+  position:relative; overflow:hidden;
+}
+.season-banner::before {
+  content:''; position:absolute;
+  top:50%; left:50%; transform:translate(-50%,-50%);
+  width:900px; height:360px;
+  background: radial-gradient(ellipse at center,
+    rgba(0,255,136,.09) 0%, rgba(0,255,136,.04) 35%, transparent 70%);
+  pointer-events:none; filter:blur(40px);
+  animation: bgPulse 4s ease-in-out infinite;
+}
+@keyframes bgPulse {
+  0%,100%{ opacity:.7; transform:translate(-50%,-50%) scale(1); }
+  50%{ opacity:1; transform:translate(-50%,-50%) scale(1.1); }
+}
+
+.season-banner .s-label {
+  font-family:'Orbitron',sans-serif;
+  font-size:clamp(8px,.6vw,9px); font-weight:700; letter-spacing:6px;
+  color:var(--green); text-transform:uppercase;
+  margin-bottom:clamp(6px,.5vw,10px);
+  text-shadow:var(--glow);
+  display:flex; align-items:center; justify-content:center; gap:10px;
+}
+.season-banner .s-label::before,
+.season-banner .s-label::after {
+  content:''; display:block; width:24px; height:1px;
+  background:var(--green); box-shadow:var(--glow);
+}
+.season-banner h1 {
+  font-family:'Orbitron',sans-serif;
+  font-size: clamp(28px, 7vw, 80px);
+  font-weight:900; letter-spacing: clamp(3px,1vw,10px); text-transform:uppercase;
+  line-height:1; color:var(--white);
+  white-space:nowrap;
+}
+.season-banner h1 span { color:var(--green); text-shadow:var(--glow-strong); }
+.season-banner .s-sub {
+  font-size: clamp(10px, .8vw, 12px); color:var(--muted);
+  margin-top: clamp(6px,.5vw,10px); letter-spacing:3px;
+  font-family:'Rajdhani',sans-serif; text-transform:uppercase;
+}
+
+/* ── FILTER BAR ── */
+.filter-bar {
+  max-width:900px; margin:0 auto;
+  padding: 0 clamp(16px,3vw,32px) clamp(12px,1vw,18px);
+  display:flex; align-items:center; gap:12px; flex-wrap:wrap;
+}
+.filter-label {
+  font-size:clamp(8px,.7vw,10px); letter-spacing:3px; text-transform:uppercase;
+  color:var(--muted); font-family:'Orbitron',sans-serif; white-space:nowrap;
+}
+.filter-select {
+  background:var(--surface2); border:1px solid var(--border2); border-radius:6px;
+  color:var(--text); font-family:'Rajdhani',sans-serif;
+  font-size:clamp(12px,1vw,14px); font-weight:600;
+  padding:8px 12px; outline:none; cursor:pointer;
+  transition: border-color var(--animation-default), box-shadow var(--animation-default);
+  appearance:none; min-width:120px;
+}
+.filter-select:focus { border-color:var(--green); box-shadow:0 0 0 2px rgba(0,255,136,.1); }
+.filter-reset {
+  background:none; border:1px solid var(--border2);
+  color:var(--muted); font-family:'Orbitron',sans-serif;
+  font-size:clamp(7px,.7vw,9px); letter-spacing:2px; text-transform:uppercase;
+  padding:8px 14px; border-radius:6px; cursor:pointer;
+  transition: border-color var(--animation-default), color var(--animation-default);
+}
+.filter-reset:hover { border-color:var(--green); color:var(--green); }
+
+/* ── RACING LINE (replaces plain hr) ── */
+.racing-red-line {
+  width:100%; height:2px;
+  background: linear-gradient(90deg,
+    transparent,
+    rgba(0,255,136,.15),
+    rgba(0,255,136,.6),
+    rgba(0,255,136,.15),
+    transparent);
+  box-shadow: 0 0 12px rgba(0,255,136,.2);
+  position:relative; z-index:101;
+  overflow:hidden;
+}
+.racing-red-line::after {
+  content:'';
+  position:absolute; top:0; left:-100%; width:60%; height:100%;
+  background: linear-gradient(90deg, transparent, rgba(0,255,136,.8), transparent);
+  animation: racingPulse 3s ease-in-out infinite;
+}
+@keyframes racingPulse {
+  0%{ left:-60%; }
+  100%{ left:160%; }
+}
+
+/* ── PODIUM ── */
+.podium-wrap {
+  max-width:900px; margin:0 auto;
+  padding: clamp(16px,2vw,28px) clamp(16px,3vw,32px) 0;
+}
+.podium-row {
+  display:flex; justify-content:center; align-items:flex-end;
+  gap:clamp(8px,1.5vw,16px); margin-bottom:clamp(12px,1.5vw,20px);
+}
+.podium-car { flex:1; max-width:280px; text-align:center; }
+.podium-car.p1{order:2;} .podium-car.p2{order:1;} .podium-car.p3{order:3;}
+.podium-block {
+  border-radius:6px 6px 0 0;
+  display:flex; align-items:center; justify-content:center;
+  position:relative; overflow:hidden;
+}
+.podium-block::before {
+  content:''; position:absolute; inset:0;
+  background:linear-gradient(180deg,rgba(255,255,255,.05),transparent);
+}
+.podium-car.p1 .podium-block {
+  height:clamp(72px,8vw,108px);
+  background:linear-gradient(180deg,#1a1400,#0d0a00);
+  border:1px solid rgba(255,210,52,.35);
+  box-shadow:0 0 30px rgba(255,210,52,.12), inset 0 1px 0 rgba(255,210,52,.15);
+}
+.podium-car.p2 .podium-block {
+  height:clamp(50px,6vw,76px);
+  background:linear-gradient(180deg,#111520,#0a0d14);
+  border:1px solid rgba(176,200,192,.25);
+}
+.podium-car.p3 .podium-block {
+  height:clamp(38px,4.5vw,58px);
+  background:linear-gradient(180deg,#140a04,#0a0604);
+  border:1px solid rgba(230,124,47,.25);
+}
+.podium-num {
+  font-family:'Orbitron',sans-serif;
+  font-size:clamp(30px,4vw,50px); font-weight:900;
+  position:relative; z-index:1;
+}
+.p1 .podium-num { color:var(--yellow); text-shadow:0 0 20px rgba(255,210,52,.5); }
+.p2 .podium-num { color:var(--silver); }
+.p3 .podium-num { color:var(--bronze); }
+.podium-info { padding: clamp(8px,.8vw,14px) clamp(4px,.5vw,10px) 0; }
+.podium-pos {
+  font-family:'Orbitron',sans-serif;
+  font-size:clamp(7px,.55vw,9px); font-weight:700; letter-spacing:3px;
+  color:var(--muted); text-transform:uppercase;
+}
+.podium-name {
+  font-family:'Orbitron',sans-serif;
+  font-size:clamp(10px,.9vw,14px); font-weight:700;
+  text-transform:uppercase; letter-spacing:1px; line-height:1.2;
+  margin-top:4px; color:var(--white);
+}
+.podium-conv {
+  font-family:'Orbitron',sans-serif;
+  font-size:clamp(18px,2.5vw,30px); font-weight:900;
+  color:var(--green); line-height:1.2; margin-top:4px;
+  text-shadow:var(--glow);
+}
+.podium-label { font-size:clamp(8px,.6vw,10px); color:var(--muted); letter-spacing:2px; text-transform:uppercase; }
+
+/* ── GRID LIST ── */
+.grid-list {
+  max-width:900px; margin:0 auto;
+  padding: clamp(16px,2vw,24px) clamp(16px,3vw,32px) 80px;
+}
+.grid-section-title {
+  font-family:'Orbitron',sans-serif;
+  font-size:clamp(8px,.65vw,9px); font-weight:700; letter-spacing:4px; text-transform:uppercase;
+  color:var(--muted); padding: clamp(14px,1.5vw,22px) 0 clamp(10px,1vw,14px);
+  border-bottom:1px solid var(--border); margin-bottom:0;
+  display:flex; align-items:center; gap:12px;
+}
+.grid-section-title::before {
+  content:''; display:block; width:20px; height:1px;
+  background:var(--green); box-shadow:var(--glow);
+}
+
+/* ── GRID ROW — key upgrade ── */
+.grid-row {
+  display:grid; grid-template-columns:52px 1fr auto;
+  align-items:center; gap:0;
+  padding:clamp(10px,1.2vw,16px) 0;
+  border-bottom:1px solid var(--border);
+  position:relative; overflow:hidden;
+  transition: background var(--animation-default), transform .4s var(--cubic-default);
+  cursor:default;
+}
+.grid-row:hover {
+  background: rgba(0,255,136,.025);
+  transform: translateX(6px);
+}
+.grid-row:hover .gr-name { letter-spacing:.8px; }
+.grid-row::before {
+  content:''; position:absolute; left:0; top:0; bottom:0; width:2px;
+  transition: box-shadow .4s;
+}
+.grid-row.zone-top::before  { background:var(--green); box-shadow:var(--glow); }
+.grid-row.zone-mid::before  { background:var(--yellow); }
+.grid-row.zone-low::before  { background:var(--red); }
+
+/* Hover scan line effect */
+.grid-row::after {
+  content:''; position:absolute; top:0; left:-100%; width:100%; height:100%;
+  background:linear-gradient(90deg, transparent, rgba(0,255,136,.025), transparent);
+  transition: left .5s var(--cubic-default);
+  pointer-events:none;
+}
+.grid-row:hover::after { left:100%; }
+
+.gr-pos {
+  font-family:'Orbitron',sans-serif;
+  font-size:clamp(16px,1.6vw,22px); font-weight:900;
+  color:var(--muted2); text-align:center;
+}
+.gr-pos.gold   { color:var(--yellow); text-shadow:0 0 10px rgba(255,210,52,.4); }
+.gr-pos.silver { color:var(--silver); }
+.gr-pos.bronze { color:var(--bronze); }
+
+.gr-name {
+  font-family:'Orbitron',sans-serif;
+  font-size:clamp(10px,1vw,13px); font-weight:700;
+  text-transform:uppercase; letter-spacing:.5px;
+  color:var(--white);
+  transition: letter-spacing .4s var(--cubic-default);
+}
+.gr-team {
+  font-size:clamp(9px,.8vw,11px); color:var(--muted);
+  margin-top:3px; display:flex; align-items:center; gap:8px;
+  font-family:'Rajdhani',sans-serif;
+}
+.gr-badge {
+  font-size:clamp(7px,.6vw,9px); font-weight:700; letter-spacing:1.5px;
+  padding:2px 8px; border-radius:3px;
+  font-family:'Orbitron',sans-serif; text-transform:uppercase;
+}
+.badge-leader { background:rgba(0,255,136,.1); border:1px solid rgba(0,255,136,.4); color:var(--green); box-shadow:var(--glow); }
+.badge-watch  { background:rgba(255,210,52,.1); border:1px solid rgba(255,210,52,.3); color:var(--yellow); }
+.badge-risk   { background:rgba(255,45,85,.1); border:1px solid rgba(255,45,85,.3); color:var(--red); animation:blinkred 2s ease-in-out infinite; }
+@keyframes blinkred{ 0%,100%{opacity:.5} 50%{opacity:1} }
+
+.gr-right { text-align:right; min-width:0; flex-shrink:0; padding-left:8px; }
+.gr-conv {
+  font-family:'Orbitron',sans-serif;
+  font-size:clamp(18px,2vw,24px); font-weight:900;
+  color:var(--green); text-shadow:var(--glow);
+}
+.gr-gap { font-size:clamp(9px,.8vw,11px); color:var(--muted); margin-top:2px; letter-spacing:1px; }
+
+/* ── MOTO TRACK — upgraded ── */
+.track-outer {
+  height:clamp(16px,1.6vw,22px);
+  background: rgba(255,255,255,.035);
+  border-radius:4px; margin-top:10px;
+  overflow:visible; position:relative;
+  border:1px solid rgba(255,255,255,.04);
+}
+.track-inner {
+  height:100%; border-radius:4px;
+  transition: width 1.4s cubic-bezier(.23,1,.32,1);
+  position:relative; background:transparent !important;
+  box-shadow:none !important; overflow:visible;
+}
+.moto-trail {
+  position:absolute; inset:0; border-radius:4px;
+  top: clamp(4px,.4vw,7px);
+  height: clamp(4px,.45vw,7px);
+}
+.moto-icon {
+  position:absolute; right:clamp(-24px,-2.2vw,-20px); top:50%;
+  transform:translateY(-50%);
+  width:clamp(40px,4vw,54px); height:clamp(22px,2.2vw,30px);
+  pointer-events:none; z-index:2;
+}
+
+/* ── ENTRY VIEW ── */
+.entry-wrap {
+  max-width:540px; margin:0 auto;
+  padding: clamp(40px,5vw,72px) clamp(16px,3vw,32px) 80px;
+}
+.entry-header { margin-bottom:clamp(28px,4vw,48px); }
+.entry-header .e-label {
+  font-family:'Orbitron',sans-serif;
+  font-size:clamp(8px,.65vw,9px); font-weight:700; letter-spacing:5px;
+  color:var(--green); text-transform:uppercase;
+  margin-bottom:10px; text-shadow:var(--glow);
+  display:flex; align-items:center; gap:8px;
+}
+.entry-header .e-label::before {
+  content:''; display:block; width:16px; height:1px;
+  background:var(--green); box-shadow:var(--glow);
+}
+.entry-header h2 {
+  font-family:'Orbitron',sans-serif;
+  font-size:clamp(20px,3vw,34px);
+  font-weight:900; text-transform:uppercase; letter-spacing:2px;
+  line-height:1.1; color:var(--white);
+}
+.entry-header p {
+  font-size:clamp(13px,1vw,15px); color:var(--muted);
+  margin-top:10px; line-height:1.7;
+  font-family:'Rajdhani',sans-serif;
+}
+
+.entry-card {
+  background:var(--surface); border:1px solid var(--border2);
+  border-radius:8px; padding:clamp(20px,2.5vw,32px);
+  position:relative; overflow:hidden;
+}
+.entry-card::before {
+  content:''; position:absolute; top:0; left:0; right:0; height:1px;
+  background:linear-gradient(90deg,transparent,var(--green),transparent);
+  opacity:.5;
+}
+.ec-label {
+  font-size:clamp(8px,.6vw,9px); font-weight:700; letter-spacing:3px;
+  text-transform:uppercase; color:var(--muted);
+  margin-bottom:8px; font-family:'Orbitron',sans-serif;
+}
+.ec-input {
+  width:100%; background:var(--surface2); border:1px solid var(--border2);
+  border-radius:6px; color:var(--white);
+  font-family:'Orbitron',sans-serif;
+  font-size:clamp(16px,1.4vw,20px); font-weight:700;
+  padding:clamp(11px,1vw,15px) 16px; outline:none;
+  transition: border-color var(--animation-default), box-shadow var(--animation-default);
+  margin-bottom:20px;
+}
+.ec-input:focus { border-color:var(--green); box-shadow:0 0 0 2px rgba(0,255,136,.1); }
+.ec-input::placeholder { color:var(--muted2); }
+select.ec-input { font-size:clamp(12px,1vw,14px); font-weight:600; appearance:none; cursor:pointer; }
+
+.ec-result {
+  background:rgba(0,255,136,.04); border:1px solid rgba(0,255,136,.15);
+  border-radius:8px; padding:clamp(14px,1.5vw,20px);
+  margin-bottom:22px; display:none;
+  position:relative; overflow:hidden;
+}
+.ec-result::before {
+  content:''; position:absolute; top:0; left:0; right:0; height:1px;
+  background:linear-gradient(90deg,transparent,var(--green),transparent);
+}
+.ec-result.show { display:block; animation:fadeSlideUp .4s ease; }
+.ec-result-label {
+  font-size:clamp(8px,.6vw,9px); color:var(--green); letter-spacing:3px;
+  text-transform:uppercase; margin-bottom:6px;
+  font-family:'Orbitron',sans-serif; text-shadow:var(--glow);
+}
+.ec-result-val {
+  font-family:'Orbitron',sans-serif;
+  font-size:clamp(44px,5vw,60px); font-weight:900;
+  color:var(--green); line-height:1;
+  text-shadow:var(--glow-strong);
+}
+.ec-result-sub { font-size:clamp(9px,.8vw,11px); color:var(--muted); margin-top:6px; letter-spacing:1px; }
+
+.ec-note {
+  font-size:clamp(11px,.9vw,13px); color:var(--muted);
+  text-align:center; line-height:1.6;
+  margin-top:14px; font-family:'Rajdhani',sans-serif;
+}
+.ec-note strong { color:rgba(255,255,255,.6); }
+
+.btn-submit {
+  width:100%;
+  background:linear-gradient(135deg,var(--green2),var(--green));
+  color:#000; border:none;
+  font-family:'Orbitron',sans-serif;
+  font-size:clamp(10px,.8vw,12px); font-weight:700; letter-spacing:3px;
+  text-transform:uppercase;
+  padding:clamp(14px,1.3vw,18px);
+  border-radius:6px; cursor:pointer;
+  transition: box-shadow var(--animation-default), transform .3s var(--cubic-default);
+  box-shadow:0 4px 20px rgba(0,255,136,.2);
+}
+.btn-submit:hover { box-shadow:var(--glow-strong); transform:translateY(-2px); }
+.btn-submit:disabled { opacity:.3; cursor:not-allowed; transform:none; box-shadow:none; }
+
+.success-card {
+  background:var(--surface); border:1px solid rgba(0,255,136,.2);
+  border-radius:8px; padding:clamp(28px,4vw,48px) clamp(20px,3vw,32px);
+  text-align:center; display:none; position:relative; overflow:hidden;
+}
+.success-card::before {
+  content:''; position:absolute; top:0; left:0; right:0; height:1px;
+  background:linear-gradient(90deg,transparent,var(--green),transparent);
+}
+.success-card.show { display:block; animation:fadeSlideUp .4s ease; }
+@keyframes fadeSlideUp { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
+.success-icon { font-size:52px; margin-bottom:16px; }
+.success-title {
+  font-family:'Orbitron',sans-serif;
+  font-size:clamp(16px,1.8vw,24px); font-weight:900;
+  text-transform:uppercase; letter-spacing:3px;
+  color:var(--green); margin-bottom:8px; text-shadow:var(--glow);
+}
+.success-sub { font-size:clamp(12px,.9vw,14px); color:var(--muted); }
+.success-pill {
+  display:inline-block;
+  background:rgba(0,255,136,.08); border:1px solid rgba(0,255,136,.3);
+  border-radius:6px; padding:10px 28px;
+  margin-top:18px;
+  font-family:'Orbitron',sans-serif;
+  font-size:clamp(34px,4vw,48px); font-weight:900;
+  color:var(--green); text-shadow:var(--glow-strong);
+}
+
+/* ── LOCK OVERLAYS ── */
+.lock-overlay {
+  position:fixed; inset:0;
+  background:rgba(3,5,8,.92);
+  display:flex; align-items:center; justify-content:center;
+  z-index:500; backdrop-filter:blur(16px);
+}
+.lock-box {
+  background:var(--surface); border:1px solid var(--border2);
+  border-radius:10px; padding:clamp(28px,4vw,44px);
+  max-width:380px; width:90%; text-align:center;
+  position:relative; overflow:hidden;
+  animation:fadeSlideUp .3s var(--cubic-default);
+}
+.lock-box::before {
+  content:''; position:absolute; top:0; left:0; right:0; height:1px;
+  background:linear-gradient(90deg,transparent,var(--green),transparent);
+}
+.lock-close {
+  position:absolute; top:14px; right:14px;
+  background:none; border:1px solid var(--border2);
+  color:var(--muted);
+  width:32px; height:32px; border-radius:6px;
+  font-size:16px; cursor:pointer;
+  display:flex; align-items:center; justify-content:center;
+  transition: border-color var(--animation-default), color var(--animation-default);
+  font-family:'Rajdhani',sans-serif; line-height:1;
+}
+.lock-close:hover { border-color:var(--red); color:var(--red); }
+.lock-icon { font-size:36px; margin-bottom:12px; }
+.lock-box h3 {
+  font-family:'Orbitron',sans-serif;
+  font-size:clamp(14px,1.4vw,18px); font-weight:900;
+  text-transform:uppercase; letter-spacing:3px;
+  margin-bottom:8px; color:var(--white);
+}
+.lock-box p { font-size:clamp(11px,.9vw,13px); color:var(--muted); margin-bottom:22px; line-height:1.6; }
+.lock-input {
+  width:100%; background:var(--surface2); border:1px solid var(--border2); border-radius:6px;
+  color:var(--white); font-family:'Orbitron',sans-serif;
+  font-size:clamp(15px,1.4vw,18px); font-weight:700;
+  padding:14px 16px; outline:none;
+  text-align:center; letter-spacing:4px; margin-bottom:12px;
+  transition: border-color var(--animation-default), box-shadow var(--animation-default);
+}
+.lock-input:focus { border-color:var(--green); box-shadow:0 0 0 2px rgba(0,255,136,.1); }
+.lock-err { font-size:11px; color:var(--red); margin-bottom:10px; min-height:18px; letter-spacing:1px; }
+.lock-btn {
+  width:100%;
+  background:linear-gradient(135deg,var(--green2),var(--green));
+  color:#000; border:none;
+  font-family:'Orbitron',sans-serif;
+  font-size:clamp(9px,.8vw,11px); font-weight:700; letter-spacing:3px; text-transform:uppercase;
+  padding:15px; border-radius:6px; cursor:pointer;
+  transition: box-shadow var(--animation-default), transform .3s var(--cubic-default);
+  box-shadow:0 4px 20px rgba(0,255,136,.2);
+}
+.lock-btn:hover { box-shadow:var(--glow-strong); transform:translateY(-1px); }
+
+/* ── ADMIN VIEW ── */
+.admin-wrap {
+  max-width:1140px; margin:0 auto;
+  padding: clamp(28px,4vw,48px) clamp(16px,3vw,32px) 80px;
+}
+.admin-header {
+  display:flex; align-items:center; justify-content:space-between;
+  margin-bottom:clamp(20px,2.5vw,32px); flex-wrap:wrap; gap:12px;
+  padding-bottom:clamp(16px,1.8vw,24px); border-bottom:1px solid var(--border);
+}
+.admin-header h2 {
+  font-family:'Orbitron',sans-serif;
+  font-size:clamp(14px,1.6vw,20px); font-weight:900; text-transform:uppercase; letter-spacing:3px;
+  color:var(--white);
+}
+.admin-header-actions { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+
+.kpi-row { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin-bottom:clamp(20px,2.5vw,32px); }
+.kpi {
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:8px; padding:clamp(14px,1.5vw,20px);
+  position:relative; overflow:hidden;
+  transition: border-color var(--animation-default), transform .4s var(--cubic-default);
+}
+.kpi:hover { border-color:var(--border2); transform:translateY(-2px); }
+.kpi::after {
+  content:''; position:absolute; top:0; left:0; right:0; height:2px;
+  background:var(--kpi-c, var(--border));
+}
+.kpi-l {
+  font-size:clamp(8px,.65vw,9px); font-weight:700; letter-spacing:3px; text-transform:uppercase;
+  color:var(--muted); margin-bottom:8px; font-family:'Orbitron',sans-serif;
+}
+.kpi-v {
+  font-family:'Orbitron',sans-serif;
+  font-size:clamp(22px,2.5vw,32px); font-weight:900;
+  color:var(--kpi-c,var(--white)); line-height:1;
+}
+.kpi-s { font-size:clamp(9px,.8vw,11px); color:var(--muted); margin-top:4px; }
+
+.admin-table-wrap {
+  background:var(--surface); border:1px solid var(--border); border-radius:8px; overflow:hidden;
+}
+.atw-header {
+  padding:clamp(12px,1.3vw,18px) clamp(14px,1.8vw,22px);
+  display:flex; align-items:center; justify-content:space-between;
+  border-bottom:1px solid var(--border);
+}
+.atw-title {
+  font-family:'Orbitron',sans-serif;
+  font-size:clamp(9px,.8vw,11px); font-weight:700; letter-spacing:3px; text-transform:uppercase; color:var(--white);
+}
+.atw-meta { font-size:clamp(9px,.8vw,11px); color:var(--muted); }
+
+table.admin-t { width:100%; border-collapse:collapse; }
+table.admin-t th {
+  font-size:clamp(7px,.6vw,9px); font-weight:700; letter-spacing:2px; text-transform:uppercase;
+  color:var(--muted); padding:10px 16px;
+  border-bottom:1px solid var(--border); text-align:left;
+  background:var(--surface2); font-family:'Orbitron',sans-serif;
+}
+table.admin-t td { padding:clamp(10px,1vw,14px) 16px; font-size:clamp(12px,1vw,14px); border-bottom:1px solid var(--border); vertical-align:middle; }
+table.admin-t tr:last-child td { border-bottom:none; }
+table.admin-t tr:hover td { background:rgba(0,255,136,.02); }
+.td-pos { font-family:'Orbitron',sans-serif; font-size:clamp(13px,1.2vw,16px); font-weight:900; color:var(--muted); }
+.td-pos.g{color:var(--yellow);} .td-pos.s{color:var(--silver);} .td-pos.b{color:var(--bronze);}
+.td-name { font-family:'Orbitron',sans-serif; font-size:clamp(10px,.9vw,12px); font-weight:700; text-transform:uppercase; letter-spacing:.5px; }
+.td-conv { font-family:'Orbitron',sans-serif; font-size:clamp(13px,1.2vw,16px); font-weight:800; color:var(--green); }
+.td-num { font-family:'Rajdhani',sans-serif; font-size:clamp(12px,1vw,15px); font-weight:600; }
+.td-fat { font-family:'Rajdhani',sans-serif; font-size:clamp(11px,.9vw,14px); font-weight:600; color:var(--yellow); }
+.td-pill {
+  display:inline-block; font-size:clamp(7px,.6vw,9px); font-weight:700; letter-spacing:1.5px;
+  padding:3px 8px; border-radius:3px; text-transform:uppercase;
+  font-family:'Orbitron',sans-serif;
+}
+.pill-g{background:rgba(0,255,136,.08);border:1px solid rgba(0,255,136,.3);color:var(--green);}
+.pill-y{background:rgba(255,210,52,.08);border:1px solid rgba(255,210,52,.3);color:var(--yellow);}
+.pill-r{background:rgba(255,45,85,.08);border:1px solid rgba(255,45,85,.3);color:var(--red);}
+
+.btn-sm {
+  background:transparent; border:1px solid var(--border2); color:var(--muted);
+  font-family:'Orbitron',sans-serif;
+  font-size:clamp(7px,.6vw,9px); font-weight:700; letter-spacing:1.5px; text-transform:uppercase;
+  padding:7px 14px; border-radius:5px; cursor:pointer;
+  transition: all .2s var(--cubic-default);
+}
+.btn-sm:hover { border-color:var(--border2); color:var(--text); }
+.btn-sm.danger { border-color:rgba(255,45,85,.3); color:var(--red); }
+.btn-sm.danger:hover { background:rgba(255,45,85,.08); }
+.btn-sm.edit { border-color:rgba(0,170,255,.3); color:var(--blue); }
+.btn-sm.edit:hover { background:rgba(0,170,255,.08); }
+
+.btn-primary-sm {
+  background:linear-gradient(135deg,var(--green2),var(--green));
+  color:#000; border:none;
+  font-family:'Orbitron',sans-serif;
+  font-size:clamp(7px,.65vw,9px); font-weight:700; letter-spacing:1.5px; text-transform:uppercase;
+  padding:8px 18px; border-radius:5px; cursor:pointer;
+  transition: box-shadow var(--animation-default);
+}
+.btn-primary-sm:hover { box-shadow:var(--glow); }
+
+.add-form {
+  background:var(--surface2); border:1px solid var(--border); border-radius:8px;
+  padding:clamp(16px,2vw,24px); margin-bottom:20px; display:none;
+}
+.add-form.show { display:block; animation:fadeSlideUp .25s var(--cubic-default); }
+.add-form-title {
+  font-family:'Orbitron',sans-serif;
+  font-size:clamp(8px,.7vw,10px); font-weight:700; letter-spacing:3px; text-transform:uppercase;
+  color:var(--muted); margin-bottom:16px;
+}
+.add-form-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:14px; margin-bottom:16px; }
+.afg label {
+  font-size:clamp(7px,.6vw,9px); font-weight:700; letter-spacing:2px; text-transform:uppercase;
+  color:var(--muted); display:block; margin-bottom:6px; font-family:'Orbitron',sans-serif;
+}
+.afg input,.afg select {
+  width:100%; background:var(--bg); border:1px solid var(--border2); border-radius:6px;
+  color:var(--white); font-family:'Rajdhani',sans-serif; font-size:16px; font-weight:600;
+  padding:10px 12px; outline:none;
+  transition: border-color var(--animation-default);
+}
+.afg input:focus,.afg select:focus { border-color:var(--green); }
+.afg select { font-size:13px; appearance:none; }
+
+/* Pilot config table */
+.pilot-row {
+  display:flex; align-items:center; gap:10px;
+  padding:10px 0; border-bottom:1px solid var(--border);
+  transition: background .2s;
+}
+.pilot-row:hover { background:rgba(0,255,136,.01); }
+.pilot-dot { width:12px; height:12px; border-radius:50%; flex-shrink:0; box-shadow:0 0 8px currentColor; }
+.pilot-name {
+  font-family:'Orbitron',sans-serif;
+  font-size:clamp(10px,.9vw,12px); font-weight:700; text-transform:uppercase; flex:1;
+  color:var(--white);
+}
+.pilot-code { font-size:11px; color:var(--muted); letter-spacing:2px; font-family:'Rajdhani',sans-serif; }
+.pilot-actions { display:flex; gap:6px; }
+
+/* Edit modal */
+.modal-overlay {
+  position:fixed; inset:0; background:rgba(3,5,8,.85);
+  display:none; align-items:center; justify-content:center;
+  z-index:600; backdrop-filter:blur(8px);
+}
+.modal-overlay.show { display:flex; }
+.modal-box {
+  background:var(--surface); border:1px solid var(--border2); border-radius:10px;
+  padding:clamp(22px,3vw,36px); max-width:420px; width:90%;
+  position:relative; animation:fadeSlideUp .25s var(--cubic-default);
+}
+.modal-box::before {
+  content:''; position:absolute; top:0; left:0; right:0; height:1px;
+  background:linear-gradient(90deg,transparent,var(--green),transparent);
+}
+.modal-title {
+  font-family:'Orbitron',sans-serif;
+  font-size:clamp(12px,1.1vw,14px); font-weight:900; text-transform:uppercase; letter-spacing:2px;
+  color:var(--white); margin-bottom:20px;
+}
+.modal-field { margin-bottom:16px; }
+.modal-field label {
+  font-size:clamp(7px,.6vw,9px); font-weight:700; letter-spacing:2px; text-transform:uppercase;
+  color:var(--muted); display:block; margin-bottom:6px; font-family:'Orbitron',sans-serif;
+}
+.modal-field input {
+  width:100%; background:var(--surface2); border:1px solid var(--border2); border-radius:6px;
+  color:var(--white); font-family:'Rajdhani',sans-serif; font-size:16px; font-weight:600;
+  padding:11px 14px; outline:none;
+  transition: border-color var(--animation-default);
+}
+.modal-field input:focus { border-color:var(--green); }
+.modal-actions { display:flex; gap:10px; margin-top:20px; }
+.color-swatches { display:flex; gap:8px; flex-wrap:wrap; margin-top:6px; }
+.swatch {
+  width:28px; height:28px; border-radius:50%; cursor:pointer;
+  border:2px solid transparent;
+  transition: transform .3s var(--cubic-default), border-color .2s;
+}
+.swatch.selected,.swatch:hover { border-color:var(--white); transform:scale(1.2); }
+
+.empty { text-align:center; padding:48px 24px; color:var(--muted); font-size:14px; }
+.empty big { display:block; font-size:32px; margin-bottom:8px; }
+
+/* ── TOAST ── */
+.toast {
+  position:fixed; bottom:28px; right:28px;
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:8px; padding:14px 20px;
+  font-size:clamp(11px,.9vw,13px); font-weight:600; color:var(--white);
+  z-index:999;
+  transform: translateY(80px) scale(.95); opacity:0;
+  transition: transform .4s var(--cubic-default), opacity .4s;
+  max-width:300px; font-family:'Rajdhani',sans-serif; letter-spacing:.5px;
+}
+.toast.show { transform:translateY(0) scale(1); opacity:1; }
+.toast.green { border-color:rgba(0,255,136,.3); background:rgba(0,20,12,.95); }
+.toast.red { border-color:rgba(255,45,85,.3); background:rgba(20,0,8,.95); }
+.toast.blue { border-color:rgba(0,170,255,.3); background:rgba(0,8,20,.95); }
+
+/* ── PODIUM #1 PULSE ── */
+@keyframes podium1pulse {
+  0%{ text-shadow:0 0 10px rgba(255,210,52,.4),0 0 20px rgba(255,210,52,.2); transform:scale(1); color:rgba(255,210,52,.7); }
+  50%{ text-shadow:0 0 20px rgba(255,210,52,1),0 0 50px rgba(255,210,52,.9),0 0 100px rgba(255,210,52,.6),0 0 180px rgba(255,210,52,.3); transform:scale(1.2); color:#fff; }
+  100%{ text-shadow:0 0 10px rgba(255,210,52,.4),0 0 20px rgba(255,210,52,.2); transform:scale(1); color:rgba(255,210,52,.7); }
+}
+.p1 .podium-num { animation:podium1pulse 2s ease-in-out infinite; display:inline-block; }
+
+/* ── TITLE EXPLODE ── */
+.title-char {
+  display:inline-block; opacity:0;
+  transform: translateX(-100px) skewX(-18deg) scale(1.4);
+  animation: charExplode .6s cubic-bezier(.23,1,.32,1) forwards;
+}
+@keyframes charExplode {
+  0%{ opacity:0; transform:translateX(-100px) skewX(-18deg) scale(1.4); }
+  60%{ opacity:1; transform:translateX(5px) skewX(3deg) scale(.98); }
+  100%{ opacity:1; transform:translateX(0) skewX(0) scale(1); }
+}
+.title-char-green {
+  display:inline-block; opacity:0;
+  transform: translateX(-100px) skewX(-18deg) scale(1.4);
+  animation: charExplodeGreen .6s cubic-bezier(.23,1,.32,1) forwards;
+  color:var(--green);
+}
+@keyframes charExplodeGreen {
+  0%{ opacity:0; transform:translateX(-100px) skewX(-18deg) scale(1.4); }
+  60%{ opacity:1; transform:translateX(5px) skewX(3deg) scale(.98); }
+  100%{ opacity:1; transform:translateX(0) skewX(0) scale(1); text-shadow:0 0 40px rgba(0,255,136,.8),0 0 80px rgba(0,255,136,.4); }
+}
+
+/* ── LIVE DOT ── */
+.live-dot {
+  display: inline-block;
+  width: 8px; height: 8px;
+  background: #00ff88;
+  border-radius: 50%;
+  margin-left: 8px;
+  vertical-align: middle;
+  position: relative;
+  box-shadow: 0 0 6px #00ff88, 0 0 12px rgba(0,255,136,.5);
+  animation: livePulse 1.4s ease-in-out infinite;
+}
+.live-dot::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  background: rgba(0,255,136,.25);
+  animation: liveRing 1.4s ease-in-out infinite;
+}
+@keyframes livePulse {
+  0%,100%{ opacity:1; transform:scale(1); }
+  50%{ opacity:.4; transform:scale(.85); }
+}
+@keyframes liveRing {
+  0%{ transform:scale(1); opacity:.6; }
+  100%{ transform:scale(2.5); opacity:0; }
+}
+
+/* ── HORIZONTAL DIVIDER ── */
+.h-line {
+  width:100%; height:1px;
+  background:linear-gradient(90deg,transparent,var(--border),transparent);
+  margin:0;
+}
+
+/* ══════════════════════════════════════
+   RESPONSIVE — MOBILE
+══════════════════════════════════════ */
+@media(max-width:480px){
+  .logo-sub{ display:none; }
+  .ntab{ padding:5px 10px; font-size:8px; letter-spacing:1px; }
+  .season-banner .s-label{ flex-direction:column; gap:4px; }
+  .season-banner .s-label::before,
+  .season-banner .s-label::after{ display:none; }
+  .podium-row{ gap:6px; }
+  .podium-car{ min-width:0; }
+  .podium-num{ font-size:24px; }
+  .podium-info{ padding:6px 2px 0; }
+  .grid-row{ grid-template-columns:36px 1fr auto; padding:10px 0; }
+  .gr-name{ font-size:10px; letter-spacing:0; }
+  .gr-conv{ font-size:16px; }
+  .track-outer{ height:16px; margin-top:6px; }
+  .moto-icon{ width:40px; height:22px; right:-20px; }
+  .moto-trail{ height:5px; top:4px; }
+}
+</style>
+</head>
+<body>
+
+<!-- VIDEO BACKGROUND -->
+<video id="bg-video" autoplay muted loop playsinline>
+  <source src="bg.mp4" type="video/mp4">
+</video>
+
+<!-- LOADING -->
+<div class="fb-loading" id="fb-loading">
+  <div class="load-logo">FLOWTH RACE</div>
+  <div class="load-bar"><div class="load-bar-fill"></div></div>
+  <div class="load-txt">Conectando ao grid…</div>
+</div>
+
+<!-- LOCK: ADMIN -->
+<div class="lock-overlay" id="adminLock" style="display:none;">
+  <div class="lock-box">
+    <button class="lock-close" onclick="closeLock('adminLock')" title="Fechar">✕</button>
+    <div class="lock-icon">⚙️</div>
+    <h3>Área Restrita</h3>
+    <p>Digite a senha de administrador para acessar o painel completo.</p>
+    <input class="lock-input" id="adminPwInput" type="password" placeholder="••••••" maxlength="20">
+    <div class="lock-err" id="adminPwErr"></div>
+    <button class="lock-btn" onclick="checkAdminPw()">Acessar</button>
+  </div>
+</div>
+
+<!-- LOCK: CLIENTE -->
+<div class="lock-overlay" id="clientLock" style="display:none;">
+  <div class="lock-box">
+    <button class="lock-close" onclick="closeLock('clientLock')" title="Fechar">✕</button>
+    <div class="lock-icon">🏎️</div>
+    <h3>Seu Código</h3>
+    <p>Digite o código de piloto que você recebeu para registrar seus resultados.</p>
+    <input class="lock-input" id="clientCodeInput" type="text" placeholder="EX: ALFA01" maxlength="10" style="text-transform:uppercase;">
+    <div class="lock-err" id="clientCodeErr"></div>
+    <button class="lock-btn" onclick="checkClientCode()">Acessar</button>
+  </div>
+</div>
+
+<!-- MODAL: EDITAR PILOTO -->
+<div class="modal-overlay" id="editModal">
+  <div class="modal-box">
+    <div class="modal-title">Editar Piloto</div>
+    <div class="modal-field">
+      <label>Nome</label>
+      <input type="text" id="edit-name" placeholder="Nome do cliente">
+    </div>
+    <div class="modal-field">
+      <label>Código (não editável)</label>
+      <input type="text" id="edit-code" readonly style="opacity:.5;cursor:not-allowed;">
+    </div>
+    <div class="modal-field">
+      <label>Cor</label>
+      <div class="color-swatches" id="edit-swatches"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-primary-sm" onclick="saveEditPilot()">Salvar</button>
+      <button class="btn-sm" onclick="closeEditModal()">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- NAV -->
+<nav class="nav">
+  <div class="nav-logo">
+    <div class="logo-mark"></div>
+    <div>
+      FLOWTH RACE
+      <span class="logo-sub">PERFORMANCE GRID</span>
+    </div>
+  </div>
+  <div class="nav-tabs">
+    <button class="ntab active" onclick="showView('grid')">Grid</button>
+    <button class="ntab" onclick="showView('entry',true)">Registrar</button>
+    <button class="ntab" onclick="showView('admin',true)">Admin</button>
+  </div>
+</nav>
+
+<!-- ══ GRID VIEW ══ -->
+<div class="view active grid-bg" id="view-grid">
+  <div class="grid-hero-sticky">
+    <div class="season-banner reveal" id="season-banner">
+      <div class="s-label">Temporada Ativa</div>
+      <h1 id="main-title" aria-label="FLOWTH RACE">FLOWTH <span>RACE</span></h1>
+      <div class="s-sub">Classificação por Taxa de Conversão · Ranking ao vivo<span class="live-dot"></span></div>
+    </div>
+
+    <div class="filter-bar reveal reveal-delay-1">
+      <span class="filter-label">Filtrar:</span>
+      <select class="filter-select" id="filter-year" onchange="applyFilter()">
+        <option value="">Todos os anos</option>
+      </select>
+      <select class="filter-select" id="filter-month" onchange="applyFilter()">
+        <option value="">Todos os meses</option>
+        <option value="Jan">Janeiro</option>
+        <option value="Fev">Fevereiro</option>
+        <option value="Mar">Março</option>
+        <option value="Abr">Abril</option>
+        <option value="Mai">Maio</option>
+        <option value="Jun">Junho</option>
+        <option value="Jul">Julho</option>
+        <option value="Ago">Agosto</option>
+        <option value="Set">Setembro</option>
+        <option value="Out">Outubro</option>
+        <option value="Nov">Novembro</option>
+        <option value="Dez">Dezembro</option>
+      </select>
+      <button class="filter-reset" onclick="resetFilter()">Limpar filtro</button>
+    </div>
+
+    <div class="racing-red-line"></div>
+  </div>
+
+  <div class="podium-wrap reveal reveal-delay-2" id="podium-wrap"></div>
+  <div class="grid-list">
+    <div class="grid-section-title reveal">THE GRID</div>
+    <div id="grid-list-rows"></div>
+    <div class="empty" id="grid-empty" style="display:none;">
+      <big>🏁</big>
+      Nenhum dado ainda. Aguardando pilotos registrarem seus resultados.
+    </div>
+  </div>
+</div>
+
+<!-- ══ ENTRY VIEW ══ -->
+<div class="view" id="view-entry">
+  <div class="entry-wrap">
+    <div class="entry-header reveal">
+      <div class="e-label">Registrar Resultado</div>
+      <h2 id="entry-title">Sua Corrida</h2>
+      <p>Preencha seus dados do período. Apenas a <strong>taxa de conversão</strong> aparece no ranking — seus números ficam privados.</p>
+    </div>
+    <div id="entry-form-block" class="reveal reveal-delay-1">
+      <div class="entry-card">
+        <div class="ec-label">Período de referência</div>
+        <select class="ec-input" id="entry-period" onchange="calcConv()">
+          <option value="">Selecione o período…</option>
+        </select>
+
+        <div class="ec-label">Total de Leads</div>
+        <input class="ec-input" type="number" min="0" id="entry-leads" placeholder="0" oninput="calcConv()">
+
+        <div class="ec-label">Total de Vendas (fechamentos)</div>
+        <input class="ec-input" type="number" min="0" id="entry-sales" placeholder="0" oninput="calcConv()">
+
+        <div class="ec-label">Faturamento via Tráfego (R$) <span style="color:var(--muted);font-size:9px;letter-spacing:1px;">· PRIVADO</span></div>
+        <input class="ec-input" type="number" min="0" id="entry-revenue" placeholder="0,00" oninput="calcConv()" style="margin-bottom:22px;">
+
+        <div class="ec-result" id="entry-result">
+          <div class="ec-result-label">Taxa de Conversão</div>
+          <div class="ec-result-val" id="entry-conv-val">—</div>
+          <div class="ec-result-sub">vendas ÷ leads × 100</div>
+        </div>
+
+        <button class="btn-submit" id="entry-submit-btn" onclick="submitEntry()" disabled>
+          Registrar no Grid
+        </button>
+      </div>
+      <div class="ec-note" style="margin-top:16px;">
+        Leads, vendas e faturamento são <strong>confidenciais</strong>. O ranking público mostra apenas sua taxa de conversão e posição.
+      </div>
+    </div>
+    <div class="success-card" id="entry-success">
+      <div class="success-icon">🏁</div>
+      <div class="success-title">Registrado!</div>
+      <div class="success-sub">Sua taxa de conversão entrou no grid ao vivo.</div>
+      <div class="success-pill" id="success-conv">—</div>
+      <div style="margin-top:24px;">
+        <button class="btn-sm" onclick="resetEntryForm()">Registrar outro período</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ ADMIN VIEW ══ -->
+<div class="view" id="view-admin">
+  <div class="admin-wrap">
+    <div class="admin-header">
+      <h2>Painel Admin</h2>
+      <div class="admin-header-actions">
+        <button class="btn-sm" onclick="toggleAddForm()">+ Entrada manual</button>
+        <button class="btn-sm danger" onclick="clearAllData()">Limpar tudo</button>
+      </div>
+    </div>
+
+    <div class="kpi-row" id="admin-kpi-row"></div>
+
+    <div class="add-form" id="add-form">
+      <div class="add-form-title">Adicionar Entrada Manual</div>
+      <div class="add-form-grid">
+        <div class="afg"><label>Piloto</label><select id="af-pilot"><option value="">Selecione…</option></select></div>
+        <div class="afg"><label>Período</label><select id="af-period"><option value="">Selecione…</option></select></div>
+        <div class="afg"><label>Leads</label><input type="number" min="0" id="af-leads" placeholder="0" oninput="calcAfConv()"></div>
+        <div class="afg"><label>Vendas</label><input type="number" min="0" id="af-sales" placeholder="0" oninput="calcAfConv()"></div>
+        <div class="afg"><label>Faturamento R$</label><input type="number" min="0" id="af-revenue" placeholder="0,00"></div>
+        <div class="afg"><label>Taxa Calc.</label><input type="text" id="af-conv" placeholder="—" readonly style="background:rgba(0,255,136,.04);color:var(--green);border-color:rgba(0,255,136,.15);"></div>
+      </div>
+      <div style="display:flex;gap:10px;">
+        <button class="btn-primary-sm" onclick="addManual()">Salvar</button>
+        <button class="btn-sm" onclick="toggleAddForm()">Cancelar</button>
+      </div>
+    </div>
+
+    <div class="admin-table-wrap" style="margin-bottom:28px;">
+      <div class="atw-header">
+        <div class="atw-title">Todos os Registros</div>
+        <div class="atw-meta" id="admin-meta">—</div>
+      </div>
+      <div id="admin-table-body"></div>
+    </div>
+
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:22px;">
+      <div style="font-family:'Orbitron',sans-serif;font-size:10px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:var(--muted);margin-bottom:18px;">
+        Configuração dos Pilotos
+      </div>
+      <div id="pilot-config-list"></div>
+      <button class="btn-sm" onclick="openAddPilotModal()" style="margin-top:14px;">+ Novo Piloto</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ══════════════════════════════════════════
+// CONFIG
+// ══════════════════════════════════════════
+const ADMIN_PW = 'flowth2025';
+
+const PERIODS = [];
+for(let y=25;y<=30;y++){
+  ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'].forEach(m=>{
+    PERIODS.push(`${m}/${y}`);
+  });
+}
+
+const COLORS = ['#00ff88','#ff2d55','#4da6ff','#ffd234','#ff8c00','#c44dff','#00d4ff','#ff6eb4','#00ffcc','#ff6640'];
+
+const DEFAULT_PILOTS = [
+  {code:'ALFA01',  name:'Cliente A', color:'#ff2d55'},
+  {code:'BRAVO02', name:'Cliente B', color:'#4da6ff'},
+  {code:'CHARLIE03',name:'Cliente C',color:'#ffd234'},
+  {code:'DELTA04', name:'Cliente D', color:'#00ff88'},
+  {code:'ECHO05',  name:'Cliente E', color:'#ff8c00'},
+  {code:'FOXTROT06',name:'Cliente F',color:'#c44dff'},
+  {code:'GOLF07',  name:'Cliente G', color:'#00d4ff'},
+  {code:'HOTEL08', name:'Cliente H', color:'#ff6eb4'},
+];
+
+let db, fs;
+let activePilotCode = null;
+let adminUnlocked = false;
+let _pilots = [...DEFAULT_PILOTS];
+let _entries = [];
+let _filterYear = '';
+let _filterMonth = '';
+let _editingCode = null;
+let _editColor = '#00ff88';
+
+// ══════════════════════════════════════════
+// FIREBASE INIT
+// ══════════════════════════════════════════
+window.addEventListener('firebase-ready', async () => {
+  db = window._db;
+  fs = window._fs;
+
+  fs.onSnapshot(fs.collection(db,'pilots'), snap => {
+    if(snap.empty){
+      DEFAULT_PILOTS.forEach(p => fs.setDoc(fs.doc(db,'pilots',p.code), p));
+      _pilots = [...DEFAULT_PILOTS];
+    } else {
+      _pilots = snap.docs.map(d => d.data());
+    }
+    populateYearFilter();
+    if(document.getElementById('view-grid').classList.contains('active')) renderGrid();
+    if(document.getElementById('view-admin').classList.contains('active')) renderAdmin();
+  });
+
+  fs.onSnapshot(fs.collection(db,'entries'), snap => {
+    _entries = snap.docs.map(d => d.data());
+    populateYearFilter();
+    if(document.getElementById('view-grid').classList.contains('active')) renderGrid();
+    if(document.getElementById('view-admin').classList.contains('active')) renderAdmin();
+  });
+
+  document.getElementById('fb-loading').classList.add('hide');
+  initScrollReveal();
+  initTitleExplode();
+});
+
+// ══════════════════════════════════════════
+// TITLE EXPLODE ANIMATION
+// ══════════════════════════════════════════
+function initTitleExplode(){
+  const titleEl = document.getElementById('main-title');
+  if(!titleEl || titleEl.dataset.exploded) return;
+  titleEl.dataset.exploded = '1';
+  const word1 = 'FLOWTH';
+  const word2 = 'RACE';
+  let html = '';
+  word1.split('').forEach((ch, i) => {
+    const delay = (i * 0.07).toFixed(2);
+    html += `<span class="title-char" style="animation-delay:${delay}s">${ch}</span>`;
+  });
+  html += '<span style="display:inline-block;width:.35em"> </span>';
+  word2.split('').forEach((ch, i) => {
+    const delay = (word1.length * 0.07 + 0.1 + i * 0.07).toFixed(2);
+    html += `<span class="title-char-green" style="animation-delay:${delay}s">${ch}</span>`;
+  });
+  titleEl.innerHTML = html;
+}
+
+// ══════════════════════════════════════════
+// SCROLL REVEAL — IntersectionObserver
+// ══════════════════════════════════════════
+function initScrollReveal(){
+  const obs = new IntersectionObserver(entries=>{
+    entries.forEach(e=>{ if(e.isIntersecting) e.target.classList.add('visible'); });
+  },{threshold:0.08});
+  document.querySelectorAll('.reveal').forEach(el=>obs.observe(el));
+}
+
+// ══════════════════════════════════════════
+// FILTER
+// ══════════════════════════════════════════
+function populateYearFilter(){
+  const years = [...new Set(_entries.map(e=>{
+    const parts = e.period.split('/');
+    return parts[1] ? '20'+parts[1] : null;
+  }).filter(Boolean))].sort();
+  const sel = document.getElementById('filter-year');
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">Todos os anos</option>' +
+    years.map(y=>`<option value="${y}" ${y===cur?'selected':''}>${y}</option>`).join('');
+}
+
+function applyFilter(){
+  _filterYear = document.getElementById('filter-year').value;
+  _filterMonth = document.getElementById('filter-month').value;
+  renderGrid();
+}
+
+function resetFilter(){
+  _filterYear='';_filterMonth='';
+  document.getElementById('filter-year').value='';
+  document.getElementById('filter-month').value='';
+  renderGrid();
+}
+
+function filteredEntries(){
+  return _entries.filter(e=>{
+    if(!_filterYear && !_filterMonth) return true;
+    const [m,y] = e.period.split('/');
+    if(_filterYear && '20'+y !== _filterYear) return false;
+    if(_filterMonth && m !== _filterMonth) return false;
+    return true;
+  });
+}
+
+// ══════════════════════════════════════════
+// NAVIGATION — with smooth tab underline
+// ══════════════════════════════════════════
+function showView(v, locked){
+  if(v==='admin' && !adminUnlocked){
+    document.getElementById('adminLock').style.display='flex';
+    document.getElementById('adminPwInput').value='';
+    document.getElementById('adminPwErr').textContent='';
+    setTimeout(()=>document.getElementById('adminPwInput').focus(),100);
+    return;
+  }
+  if(v==='entry' && !activePilotCode){
+    document.getElementById('clientLock').style.display='flex';
+    document.getElementById('clientCodeInput').value='';
+    document.getElementById('clientCodeErr').textContent='';
+    setTimeout(()=>document.getElementById('clientCodeInput').focus(),100);
+    return;
+  }
+  document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));
+  document.querySelectorAll('.ntab').forEach(x=>x.classList.remove('active'));
+  document.getElementById('view-'+v).classList.add('active');
+  document.querySelectorAll('.ntab')[['grid','entry','admin'].indexOf(v)].classList.add('active');
+  setTimeout(initScrollReveal,50);
+  if(v==='grid') renderGrid();
+  if(v==='admin') renderAdmin();
+  if(v==='entry') renderEntryForm();
+}
+
+// ══════════════════════════════════════════
+// LOCKS
+// ══════════════════════════════════════════
+function closeLock(id){
+  document.getElementById(id).style.display='none';
+}
+
+function checkAdminPw(){
+  const v = document.getElementById('adminPwInput').value;
+  if(v===ADMIN_PW){
+    adminUnlocked=true;
+    document.getElementById('adminLock').style.display='none';
+    showView('admin');
+  } else {
+    document.getElementById('adminPwErr').textContent='Senha incorreta.';
+    document.getElementById('adminPwInput').value='';
+    document.getElementById('adminPwInput').focus();
+  }
+}
+document.getElementById('adminPwInput').addEventListener('keydown',e=>{if(e.key==='Enter')checkAdminPw();});
+
+function checkClientCode(){
+  const v = document.getElementById('clientCodeInput').value.toUpperCase().trim();
+  const found = _pilots.find(p=>p.code===v);
+  if(found){
+    activePilotCode=v;
+    document.getElementById('clientLock').style.display='none';
+    showView('entry');
+  } else {
+    document.getElementById('clientCodeErr').textContent='Código não encontrado. Verifique com seu gestor.';
+    document.getElementById('clientCodeInput').focus();
+  }
+}
+document.getElementById('clientCodeInput').addEventListener('keydown',e=>{if(e.key==='Enter')checkClientCode();});
+
+// ══════════════════════════════════════════
+// GRID (RANKING PÚBLICO)
+// ══════════════════════════════════════════
+function renderGrid(){
+  const entries = filteredEntries();
+  const pilots = _pilots;
+
+  const pilotMap={};
+  entries.forEach(e=>{
+    if(!pilotMap[e.code])pilotMap[e.code]={totalLeads:0,totalSales:0,entries:0};
+    pilotMap[e.code].totalLeads+=e.leads;
+    pilotMap[e.code].totalSales+=e.sales;
+    pilotMap[e.code].entries++;
+  });
+
+  let ranked = pilots.map(p=>{
+    const d = pilotMap[p.code]||null;
+    const conv = d&&d.totalLeads>0?d.totalSales/d.totalLeads*100:null;
+    return{...p,conv,hasData:!!d,totalLeads:d?d.totalLeads:0,totalSales:d?d.totalSales:0};
+  }).filter(p=>p.hasData).sort((a,b)=>(b.conv||0)-(a.conv||0));
+
+  const noData = pilots.filter(p=>!pilotMap[p.code]);
+  const podiumWrap = document.getElementById('podium-wrap');
+  const listWrap = document.getElementById('grid-list-rows');
+  const emptyEl = document.getElementById('grid-empty');
+
+  if(!ranked.length){
+    podiumWrap.innerHTML='';listWrap.innerHTML='';emptyEl.style.display='block';
+    return;
+  }
+  emptyEl.style.display='none';
+
+  const maxConv = Math.max(...ranked.map(p=>p.conv||0),1);
+  const leaderConv = ranked[0].conv||0;
+
+  // Podium
+  const top3 = ranked.slice(0,3);
+  while(top3.length<3)top3.push(null);
+  podiumWrap.innerHTML=`<div class="podium-row">${[top3[1],top3[0],top3[2]].map((p,i)=>{
+    const rp=i===0?2:i===1?1:3;
+    const cls=rp===1?'p1':rp===2?'p2':'p3';
+    const nc=rp===1?'var(--yellow)':rp===2?'var(--silver)':'var(--bronze)';
+    if(!p)return`<div class="podium-car ${cls}"><div class="podium-block"><span style="font-size:28px;color:var(--muted2);">—</span></div><div class="podium-info"><div class="podium-pos">${rp}º lugar</div><div class="podium-name" style="color:var(--muted)">Vaga aberta</div><div class="podium-conv" style="color:var(--muted)">—</div></div></div>`;
+    return`<div class="podium-car ${cls} reveal">
+      <div class="podium-block"><span class="podium-num" style="color:${nc}">${rp}</span></div>
+      <div class="podium-info">
+        <div class="podium-pos">${rp}º lugar</div>
+        <div class="podium-name" style="color:${p.color||'#fff'}">${p.name}</div>
+        <div class="podium-conv" style="color:${p.color||'var(--green)'};text-shadow:0 0 20px ${p.color||'var(--green)'}66">${p.conv.toFixed(1)}%</div>
+        <div class="podium-label">taxa de conversão</div>
+      </div>
+    </div>`;
+  }).join('')}</div>`;
+
+  const posCls=i=>{if(i===0)return'gold';if(i===1)return'silver';if(i===2)return'bronze';return'';};
+  const zoneCls=(conv,max)=>{const p=conv/max;if(p>=.65)return'zone-top';if(p>=.35)return'zone-mid';return'zone-low';};
+  const badgeFor=(conv,max)=>{
+    const p=conv/max;
+    if(p>=.65)return`<span class="gr-badge badge-leader">Top</span>`;
+    if(p>=.35)return`<span class="gr-badge badge-watch">Médio</span>`;
+    return`<span class="gr-badge badge-risk">Atenção</span>`;
+  };
+  const gap=(conv,leader)=>leader===conv?'Líder':`+${(leader-conv).toFixed(1)}% do líder`;
+
+  listWrap.innerHTML=ranked.map((p,i)=>{
+    const w=Math.round(p.conv/maxConv*100);
+    const c=p.color||'#00ff88';
+    const motoSVG=`<svg class="moto-icon" viewBox="0 0 52 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="10" cy="20" r="7" stroke="${c}" stroke-width="1.5" fill="none" opacity=".9"/>
+      <circle cx="10" cy="20" r="3" fill="${c}" opacity=".5"/>
+      <circle cx="42" cy="20" r="7" stroke="${c}" stroke-width="1.5" fill="none" opacity=".9"/>
+      <circle cx="42" cy="20" r="3" fill="${c}" opacity=".5"/>
+      <path d="M10 13 L20 8 L36 8 L44 14 L42 20 L10 20 Z" stroke="${c}" stroke-width="1.2" fill="${c}" fill-opacity=".15"/>
+      <path d="M28 8 L36 5 L44 10 L44 14 L36 8 Z" fill="${c}" fill-opacity=".4" stroke="${c}" stroke-width=".8"/>
+      <path d="M22 8 L26 3 L31 3 L33 7 L28 8 Z" fill="${c}" fill-opacity=".7"/>
+      <circle cx="27" cy="2.5" r="2.2" fill="${c}" opacity=".8"/>
+      <line x1="10" y1="18" x2="2" y2="18" stroke="${c}" stroke-width="1.5" opacity=".6"/>
+      <line x1="10" y1="20" x2="0" y2="21" stroke="${c}" stroke-width=".8" opacity=".3"/>
+    </svg>`;
+    const trailStyle=`background:linear-gradient(90deg, transparent 0%, ${c}22 30%, ${c}66 70%, ${c}cc 90%, ${c} 100%); box-shadow: 0 0 8px ${c}88;`;
+    return`<div class="grid-row ${zoneCls(p.conv,maxConv)} reveal">
+      <div class="gr-pos ${posCls(i)}">${i+1}</div>
+      <div class="gr-body" style="padding:0 12px;min-width:0;">
+        <div class="gr-name" style="color:${c}">${p.name}</div>
+        <div class="gr-team">${badgeFor(p.conv,maxConv)}</div>
+        <div class="track-outer">
+          <div class="track-inner" style="width:${w}%;">
+            <div class="moto-trail" style="${trailStyle}"></div>
+            ${motoSVG}
+          </div>
+        </div>
+      </div>
+      <div class="gr-right">
+        <div class="gr-conv" style="color:${c};text-shadow:0 0 15px ${c}66">${p.conv.toFixed(1)}%</div>
+        <div class="gr-gap">${gap(p.conv,leaderConv)}</div>
+      </div>
+    </div>`;
+  }).join('');
+
+  if(noData.length){
+    listWrap.innerHTML+=`<div style="padding:12px 0 4px;font-family:'Orbitron',sans-serif;font-size:9px;letter-spacing:4px;text-transform:uppercase;color:var(--muted2);border-top:1px solid var(--border);margin-top:8px;">Aguardando registro</div>`+
+    noData.map(p=>`<div class="grid-row" style="opacity:.3;">
+      <div class="gr-pos">—</div>
+      <div class="gr-body" style="padding:0 12px;"><div class="gr-name" style="color:var(--muted)">${p.name}</div><div class="gr-team"></div></div>
+      <div class="gr-right"><div style="font-size:11px;color:var(--muted2);letter-spacing:2px;">SEM DADOS</div></div>
+    </div>`).join('');
+  }
+
+  setTimeout(initScrollReveal,80);
+}
+
+// ══════════════════════════════════════════
+// ENTRY FORM
+// ══════════════════════════════════════════
+function renderEntryForm(){
+  const sel = document.getElementById('entry-period');
+  sel.innerHTML='<option value="">Selecione o período…</option>'+PERIODS.map(p=>`<option value="${p}">${p}</option>`).join('');
+  const pilot = _pilots.find(p=>p.code===activePilotCode);
+  if(pilot){
+    document.getElementById('entry-title').textContent=pilot.name;
+    document.getElementById('entry-title').style.color=pilot.color||'var(--white)';
+  }
+}
+
+function calcConv(){
+  const l=parseFloat(document.getElementById('entry-leads').value)||0;
+  const s=parseFloat(document.getElementById('entry-sales').value)||0;
+  const res=document.getElementById('entry-result');
+  const btn=document.getElementById('entry-submit-btn');
+  const p=document.getElementById('entry-period').value;
+  if(l>0){
+    const conv=s/l*100;
+    document.getElementById('entry-conv-val').textContent=conv.toFixed(1)+'%';
+    res.classList.add('show');
+    btn.disabled=!p;
+  } else {
+    res.classList.remove('show');
+    btn.disabled=true;
+  }
+}
+
+async function submitEntry(){
+  const period=document.getElementById('entry-period').value;
+  const leads=parseFloat(document.getElementById('entry-leads').value)||0;
+  const sales=parseFloat(document.getElementById('entry-sales').value)||0;
+  const revenue=parseFloat(document.getElementById('entry-revenue').value)||0;
+  if(!period||leads<=0){showToast('Preencha todos os campos.','red');return;}
+  const btn=document.getElementById('entry-submit-btn');
+  btn.disabled=true;btn.textContent='Salvando…';
+  const conv=sales/leads*100;
+  const docId=activePilotCode+'_'+period.replace('/','_');
+  try{
+    await fs.setDoc(fs.doc(db,'entries',docId),{
+      code:activePilotCode,period,leads,sales,revenue,
+      conv:+conv.toFixed(4),ts:Date.now()
+    });
+    document.getElementById('success-conv').textContent=conv.toFixed(1)+'%';
+    document.getElementById('entry-success').classList.add('show');
+    document.getElementById('entry-form-block').style.display='none';
+    showToast('Resultado registrado no grid!','green');
+  }catch(e){
+    showToast('Erro ao salvar. Tente novamente.','red');
+    btn.disabled=false;btn.textContent='Registrar no Grid';
+  }
+}
+
+function resetEntryForm(){
+  document.getElementById('entry-success').classList.remove('show');
+  document.getElementById('entry-form-block').style.display='block';
+  ['entry-leads','entry-sales','entry-revenue'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('entry-submit-btn').disabled=true;
+  document.getElementById('entry-submit-btn').textContent='Registrar no Grid';
+  calcConv();
+}
+
+// ══════════════════════════════════════════
+// ADMIN
+// ══════════════════════════════════════════
+function renderAdmin(){
+  const entries=_entries;
+  const pilots=_pilots;
+  const totalPilots=pilots.length;
+  const totalEntries=entries.length;
+  const avgConv=entries.length?entries.reduce((a,b)=>a+b.conv,0)/entries.length:0;
+  const best=entries.length?entries.reduce((a,b)=>b.conv>a.conv?b:a):null;
+  const totalRevenue=entries.reduce((a,b)=>a+(b.revenue||0),0);
+
+  document.getElementById('admin-kpi-row').innerHTML=`
+    <div class="kpi" style="--kpi-c:var(--blue)"><div class="kpi-l">Pilotos</div><div class="kpi-v">${totalPilots}</div></div>
+    <div class="kpi" style="--kpi-c:var(--green)"><div class="kpi-l">Registros</div><div class="kpi-v">${totalEntries}</div></div>
+    <div class="kpi" style="--kpi-c:var(--yellow)"><div class="kpi-l">Conversão Média</div><div class="kpi-v">${avgConv.toFixed(1)}%</div></div>
+    <div class="kpi" style="--kpi-c:var(--accent2)"><div class="kpi-l">Melhor Registro</div><div class="kpi-v">${best?best.conv.toFixed(1)+'%':'—'}</div><div class="kpi-s">${best?(pilots.find(p=>p.code===best.code)||{name:best.code}).name+' · '+best.period:'—'}</div></div>
+    <div class="kpi" style="--kpi-c:var(--yellow)"><div class="kpi-l">Fat. Total Tráfego</div><div class="kpi-v">R$${totalRevenue.toLocaleString('pt-BR',{minimumFractionDigits:0,maximumFractionDigits:0})}</div></div>`;
+
+  if(!entries.length){
+    document.getElementById('admin-table-body').innerHTML='<div class="empty"><big>📋</big>Nenhum registro ainda.</div>';
+    document.getElementById('admin-meta').textContent='0 registros';
+  } else {
+    const sorted=[...entries].sort((a,b)=>b.conv-a.conv);
+    const maxConv=Math.max(...sorted.map(e=>e.conv),1);
+    document.getElementById('admin-meta').textContent=`${entries.length} registro${entries.length!==1?'s':''}`;
+    document.getElementById('admin-table-body').innerHTML=`
+      <table class="admin-t">
+        <thead><tr><th>Pos</th><th>Piloto</th><th>Período</th><th>Leads</th><th>Vendas</th><th>Conversão</th><th>Faturamento</th><th>Status</th><th></th></tr></thead>
+        <tbody>${sorted.map((e,i)=>{
+          const p=pilots.find(x=>x.code===e.code)||{name:e.code,color:'#888'};
+          const pct=e.conv/maxConv;
+          const pill=pct>=.65?'pill-g':pct>=.35?'pill-y':'pill-r';
+          const tdPos=i===0?'g':i===1?'s':i===2?'b':'';
+          const docId=e.code+'_'+e.period.replace('/','_');
+          const rev=e.revenue?'R$'+Number(e.revenue).toLocaleString('pt-BR',{minimumFractionDigits:0}):'—';
+          return`<tr>
+            <td><span class="td-pos ${tdPos}">${i+1}</span></td>
+            <td><span class="td-name" style="color:${p.color||'#fff'}">${p.name}</span><br><span style="font-size:10px;color:var(--muted);letter-spacing:1px;">${e.code}</span></td>
+            <td style="color:var(--muted);font-family:'Rajdhani',sans-serif;">${e.period}</td>
+            <td class="td-num">${e.leads.toLocaleString('pt-BR')}</td>
+            <td class="td-num">${e.sales.toLocaleString('pt-BR')}</td>
+            <td><span class="td-conv">${e.conv.toFixed(1)}%</span></td>
+            <td class="td-fat">${rev}</td>
+            <td><span class="td-pill ${pill}">${pct>=.65?'Top':pct>=.35?'Médio':'Atenção'}</span></td>
+            <td><button class="btn-sm danger" onclick="deleteEntry('${docId}')">✕</button></td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table>`;
+  }
+
+  const pcl=document.getElementById('pilot-config-list');
+  pcl.innerHTML=_pilots.map(p=>`
+    <div class="pilot-row">
+      <div class="pilot-dot" style="background:${p.color};color:${p.color};"></div>
+      <span class="pilot-name">${p.name}</span>
+      <span class="pilot-code">${p.code}</span>
+      <div class="pilot-actions">
+        <button class="btn-sm edit" onclick="openEditModal('${p.code}')">Editar</button>
+        <button class="btn-sm danger" onclick="removePilot('${p.code}')">Remover</button>
+      </div>
+    </div>`).join('');
+
+  const ap=document.getElementById('af-pilot');
+  ap.innerHTML='<option value="">Selecione…</option>'+_pilots.map(p=>`<option value="${p.code}">${p.name} (${p.code})</option>`).join('');
+  const aper=document.getElementById('af-period');
+  aper.innerHTML='<option value="">Selecione…</option>'+PERIODS.map(p=>`<option value="${p}">${p}</option>`).join('');
+}
+
+function toggleAddForm(){document.getElementById('add-form').classList.toggle('show');}
+
+function calcAfConv(){
+  const l=parseFloat(document.getElementById('af-leads').value)||0;
+  const s=parseFloat(document.getElementById('af-sales').value)||0;
+  document.getElementById('af-conv').value=l>0?(s/l*100).toFixed(1)+'%':'—';
+}
+
+async function addManual(){
+  const code=document.getElementById('af-pilot').value;
+  const period=document.getElementById('af-period').value;
+  const leads=parseFloat(document.getElementById('af-leads').value)||0;
+  const sales=parseFloat(document.getElementById('af-sales').value)||0;
+  const revenue=parseFloat(document.getElementById('af-revenue').value)||0;
+  if(!code||!period||leads<=0){showToast('Preencha todos os campos.','red');return;}
+  const conv=sales/leads*100;
+  const docId=code+'_'+period.replace('/','_');
+  try{
+    await fs.setDoc(fs.doc(db,'entries',docId),{code,period,leads,sales,revenue,conv:+conv.toFixed(4),ts:Date.now()});
+    showToast('Entrada adicionada.','green');
+    toggleAddForm();
+  }catch(e){showToast('Erro ao salvar.','red');}
+}
+
+async function deleteEntry(docId){
+  if(!confirm('Remover esta entrada?'))return;
+  try{
+    await fs.deleteDoc(fs.doc(db,'entries',docId));
+    showToast('Entrada removida.','red');
+  }catch(e){showToast('Erro ao remover.','red');}
+}
+
+async function clearAllData(){
+  if(!confirm('Apagar TODOS os registros? Esta ação não pode ser desfeita.'))return;
+  try{
+    const snap=await fs.getDocs(fs.collection(db,'entries'));
+    await Promise.all(snap.docs.map(d=>fs.deleteDoc(d.ref)));
+    showToast('Dados apagados.','red');
+  }catch(e){showToast('Erro.','red');}
+}
+
+// ══════════════════════════════════════════
+// PILOT CRUD
+// ══════════════════════════════════════════
+function openAddPilotModal(){
+  const code=prompt('Código do piloto (ex: ZULU09):');
+  if(!code)return;
+  const name=prompt('Nome do cliente:');
+  if(!name)return;
+  const codeClean=code.toUpperCase().trim();
+  if(_pilots.find(p=>p.code===codeClean)){showToast('Código já existe.','red');return;}
+  const color=COLORS[_pilots.length%COLORS.length];
+  fs.setDoc(fs.doc(db,'pilots',codeClean),{code:codeClean,name:name.trim(),color})
+    .then(()=>showToast('Piloto adicionado!','green'))
+    .catch(()=>showToast('Erro.','red'));
+}
+
+function openEditModal(code){
+  const p=_pilots.find(x=>x.code===code);
+  if(!p)return;
+  _editingCode=code;
+  _editColor=p.color||COLORS[0];
+  document.getElementById('edit-name').value=p.name;
+  document.getElementById('edit-code').value=p.code;
+  document.getElementById('edit-swatches').innerHTML=COLORS.map(c=>`
+    <div class="swatch ${c===_editColor?'selected':''}"
+      style="background:${c};box-shadow:0 0 8px ${c}66;"
+      onclick="selectSwatch(this,'${c}')">
+    </div>`).join('');
+  document.getElementById('editModal').classList.add('show');
+}
+
+function selectSwatch(el,color){
+  _editColor=color;
+  document.querySelectorAll('.swatch').forEach(s=>s.classList.remove('selected'));
+  el.classList.add('selected');
+}
+
+function closeEditModal(){
+  document.getElementById('editModal').classList.remove('show');
+  _editingCode=null;
+}
+
+async function saveEditPilot(){
+  if(!_editingCode)return;
+  const name=document.getElementById('edit-name').value.trim();
+  if(!name){showToast('Nome não pode ser vazio.','red');return;}
+  const p=_pilots.find(x=>x.code===_editingCode);
+  try{
+    await fs.setDoc(fs.doc(db,'pilots',_editingCode),{...p,name,color:_editColor});
+    showToast('Piloto atualizado!','green');
+    closeEditModal();
+  }catch(e){showToast('Erro ao salvar.','red');}
+}
+
+async function removePilot(code){
+  const p=_pilots.find(x=>x.code===code);
+  if(!confirm(`Remover ${p?p.name:code}?`))return;
+  try{
+    await fs.deleteDoc(fs.doc(db,'pilots',code));
+    showToast('Piloto removido.','red');
+  }catch(e){showToast('Erro.','red');}
+}
+
+// ══════════════════════════════════════════
+// TOAST
+// ══════════════════════════════════════════
+let toastTimer=null;
+function showToast(msg,type='green'){
+  const t=document.getElementById('toast');
+  t.textContent=msg;
+  t.className='toast show '+(type||'green');
+  if(toastTimer)clearTimeout(toastTimer);
+  toastTimer=setTimeout(()=>t.classList.remove('show'),3200);
+}
+</script>
+</body>
+</html>
